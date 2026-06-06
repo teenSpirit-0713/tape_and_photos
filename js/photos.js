@@ -83,8 +83,6 @@ function showNextPhoto() {
 
   const rot = (Math.random() - 0.5) * 18;
 
-  img.src = photo.url;
-  img.dataset.blobUrl = photo.url;
   img.style.width = size + 'px';
   img.style.height = aspectH + 'px';
   img.style.left = x + 'px';
@@ -94,33 +92,50 @@ function showNextPhoto() {
   img.style.borderRadius = '8px';
   img.style.boxShadow = '0 8px 32px rgba(0,0,0,0.5)';
 
-  // fade in → hold → fade out → remove
-  gsap.to(img, {
-    opacity: 1,
-    scale: 1.02,
-    rotation: rot * 0.5,
-    duration: 1.8,
-    ease: 'power2.inOut',
-    onComplete: () => {
-      if (!breathingActive) { removePhotoEl(img); return; }
-      gsap.to(img, {
-        opacity: 1, scale: 1.04,
-        duration: 3.5,
-        ease: 'none',
-        onComplete: () => {
-          if (!breathingActive) { removePhotoEl(img); return; }
-          gsap.to(img, {
-            opacity: 0, scale: 1.08,
-            duration: 2.2, ease: 'power2.in', delay: 0.3,
-            onComplete: () => {
-              removePhotoEl(img);
-              activePhotoEls = activePhotoEls.filter(el => el !== img);
-            }
-          });
-        }
-      });
-    }
-  });
+  function startPhotoAnimation() {
+    // fade in → hold → fade out → remove
+    gsap.to(img, {
+      opacity: 1,
+      scale: 1.02,
+      rotation: rot * 0.5,
+      duration: 1.8,
+      ease: 'power2.inOut',
+      onComplete: () => {
+        if (!breathingActive) { removePhotoEl(img); return; }
+        gsap.to(img, {
+          opacity: 1, scale: 1.04,
+          duration: 3.5,
+          ease: 'none',
+          onComplete: () => {
+            if (!breathingActive) { removePhotoEl(img); return; }
+            gsap.to(img, {
+              opacity: 0, scale: 1.08,
+              duration: 2.2, ease: 'power2.in', delay: 0.3,
+              onComplete: () => {
+                removePhotoEl(img);
+                activePhotoEls = activePhotoEls.filter(el => el !== img);
+              }
+            });
+          }
+        });
+      }
+    });
+  }
+
+  // Wait for image to load before animating
+  if (img.complete && img.naturalWidth > 0) {
+    startPhotoAnimation();
+  } else {
+    img.onload = startPhotoAnimation;
+    img.onerror = () => {
+      // Image failed to load, remove silently
+      activePhotoEls = activePhotoEls.filter(el => el !== img);
+      if (img.parentNode) img.remove();
+    };
+  }
+
+  img.src = photo.url;
+  img.dataset.blobUrl = photo.url;
 }
 
 function removePhotoEl(el) {

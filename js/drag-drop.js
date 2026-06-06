@@ -137,7 +137,9 @@ function onPointerMove(e) {
 
   const x = e.clientX - dragState.offsetX;
   const y = e.clientY - dragState.offsetY;
-  gsap.set(dragState.ghost, { x, y });
+  // Use left/top directly — gsap.set x/y uses translate which stacks on top of left/top
+  dragState.ghost.style.left = x + 'px';
+  dragState.ghost.style.top = y + 'px';
 
   // Highlight drop zone
   const playerRect = getPlayerRect();
@@ -215,8 +217,10 @@ function onPointerUp(e) {
     });
   } else if (isFromPlayer && isOverPlayer) {
     // Dragged from player back onto player → cancel, stay
+    ghost.style.transform = '';
     gsap.to(ghost, {
-      x: ghostRect.left, y: ghostRect.top - 20,
+      left: ghostRect.left + 'px',
+      top: (ghostRect.top - 20) + 'px',
       opacity: 0, duration: 0.3, ease: 'power2.in',
       onComplete: () => {
         ghost.remove();
@@ -227,9 +231,10 @@ function onPointerUp(e) {
   } else {
     // Gallery tape dropped outside → spring back
     const targetRect = tapeEl.getBoundingClientRect();
+    ghost.style.transform = '';
     gsap.to(ghost, {
-      x: targetRect.left,
-      y: targetRect.top,
+      left: targetRect.left + 'px',
+      top: targetRect.top + 'px',
       duration: 0.4,
       ease: 'elastic.out(1, 0.5)',
       onComplete: () => {
@@ -242,16 +247,20 @@ function onPointerUp(e) {
 }
 
 function animateTapeToPlayer(ghost, playerRect, onComplete) {
-  const ghostW = ghost.getBoundingClientRect().width;
-  const ghostH = ghost.getBoundingClientRect().height;
+  const ghostRect = ghost.getBoundingClientRect();
+  const ghostW = ghostRect.width;
+  const ghostH = ghostRect.height;
   const targetX = playerRect.left + playerRect.width / 2 - ghostW / 2;
   const targetY = playerRect.top + playerRect.height / 2 - ghostH / 2;
   const scaleX = Math.min(380 / ghostW, 2.2);
   const scaleY = Math.min(280 / ghostH, 2.2);
   const scale = Math.min(scaleX, scaleY);
 
+  // Clear any transform from previous drag, animate left/top directly
+  ghost.style.transform = '';
   gsap.to(ghost, {
-    x: targetX, y: targetY,
+    left: targetX + 'px',
+    top: targetY + 'px',
     scaleX: scale, scaleY: scale,
     opacity: 0,
     duration: 0.5,
@@ -261,9 +270,10 @@ function animateTapeToPlayer(ghost, playerRect, onComplete) {
 }
 
 function animateTapeToGallery(ghost, targetRect, onComplete) {
+  ghost.style.transform = '';
   gsap.to(ghost, {
-    x: targetRect.left,
-    y: targetRect.top,
+    left: targetRect.left + 'px',
+    top: targetRect.top + 'px',
     scaleX: 1, scaleY: 1,
     opacity: 0.7,
     duration: 0.5,
