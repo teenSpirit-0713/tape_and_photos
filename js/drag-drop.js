@@ -62,7 +62,7 @@ function onPointerDown(e) {
       ghost.innerHTML = `<div class="tape-screw tl"></div><div class="tape-screw tr"></div><div class="tape-screw bl"></div><div class="tape-screw br"></div><div class="tape-label-top"></div><div class="tape-label-bottom"></div><div class="tape-window"><div class="tape-reel left"></div><div class="tape-path"></div><div class="tape-reel right"></div></div><div class="tape-name-label">${escapeHtml(tape.name)}</div>`;
     }
     document.body.appendChild(ghost);
-    ghost.style.transform = 'scale(1.08)';
+    gsap.set(ghost, { scale: 1.08 });
     tapeEl.style.opacity = '0.4';
     dragState = {
       tapeId, tapeEl, ghost,
@@ -85,7 +85,7 @@ function onPointerDown(e) {
     clone.style.pointerEvents = 'none';
     clone.style.willChange = 'transform';
     document.body.appendChild(clone);
-    clone.style.transform = 'scale(1.08)';
+    gsap.set(clone, { scale: 1.08 });
     tapeEl.style.opacity = '0.3';
     dragState = {
       tapeId, tapeEl, ghost: clone,
@@ -105,11 +105,12 @@ function onPointerMove(e) {
   if (!dragState.hasMoved && Math.abs(dx) < MIN_DRAG_DIST && Math.abs(dy) < MIN_DRAG_DIST) return;
   dragState.hasMoved = true;
 
-  // Direct left/top for natural drag feel
-  const x = e.clientX - dragState.offsetX;
-  const y = e.clientY - dragState.offsetY;
-  dragState.ghost.style.left = x + 'px';
-  dragState.ghost.style.top = y + 'px';
+  // GPU-accelerated: translate from origin position (avoid left/top reflow)
+  const screenX = e.clientX - dragState.offsetX;
+  const screenY = e.clientY - dragState.offsetY;
+  const tx = screenX - dragState.originLeft;
+  const ty = screenY - dragState.originTop;
+  gsap.set(dragState.ghost, { x: tx, y: ty, scale: 1.08 });
 
   const ghostRect = dragState.ghost.getBoundingClientRect();
   const ghostCX = ghostRect.left + ghostRect.width / 2;
