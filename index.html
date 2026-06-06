@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>磁带回忆</title>
+  <link rel="stylesheet" href="css/styles.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js" defer></script>
+</head>
+<body>
+
+  <!-- Loading Screen -->
+  <div id="loading-screen">
+    <div class="loader-tape">
+      <div class="loader-reel left"></div>
+      <div class="loader-reel right"></div>
+    </div>
+    <p class="loader-text">加载中...</p>
+  </div>
+
+  <!-- Top Bar -->
+  <header id="top-bar">
+    <div class="bar-left">
+      <span class="logo">📼 磁带回忆</span>
+    </div>
+    <div class="bar-center">
+      <button id="btn-add-tape" class="btn-primary">
+        <span class="btn-icon">+</span> 添加音乐
+      </button>
+    </div>
+    <div class="bar-right">
+      <button id="btn-expand-gallery" class="btn-ghost" title="展开磁带库">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
+      </button>
+      <button id="btn-export" class="btn-ghost" title="导出备份">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+      </button>
+      <button id="btn-import" class="btn-ghost" title="导入备份">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="3 10 8 15 13 10"/><line x1="8" y1="15" x2="8" y2="2"/></svg>
+      </button>
+    </div>
+  </header>
+
+  <!-- Center Area -->
+  <main id="center-area">
+    <!-- Photo breathing stage -->
+    <div id="photo-stage" aria-hidden="true"></div>
+
+    <!-- Player Drop Zone -->
+    <div id="player-zone">
+      <div id="tape-player" class="tape-player-empty">
+        <!-- Empty state hint -->
+        <div class="player-empty-hint">
+          <div class="hint-arrow">↓</div>
+          <p>拖入磁带开始播放</p>
+          <p class="hint-sub">或点击底部磁带上方的箭头</p>
+        </div>
+
+        <!-- Active tape slot (hidden initially) -->
+        <div class="player-tape-slot" id="player-tape-slot">
+          <div class="slot-shell">
+            <div class="slot-window">
+              <div class="slot-reel left" id="reel-left"></div>
+              <div class="slot-reel right" id="reel-right"></div>
+              <div class="slot-tape-path"></div>
+            </div>
+            <div class="slot-label-top"></div>
+            <div class="slot-label-bottom"></div>
+            <div class="slot-name"></div>
+            <div class="slot-screw tl"></div>
+            <div class="slot-screw tr"></div>
+            <div class="slot-screw bl"></div>
+            <div class="slot-screw br"></div>
+          </div>
+        </div>
+      </div>
+      <!-- Playback info -->
+      <div id="playback-info" class="playback-info-hidden">
+        <div class="info-track">
+          <span id="info-name" class="info-name"></span>
+          <span id="info-time" class="info-time">00:00 / 00:00</span>
+        </div>
+        <div class="info-progress-bar">
+          <div id="info-progress" class="info-progress-fill"></div>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <!-- Bottom Gallery -->
+  <footer id="bottom-gallery">
+    <div class="gallery-scroll" id="gallery-scroll">
+      <div class="gallery-track" id="gallery-track">
+        <!-- dynamically filled -->
+      </div>
+    </div>
+    <div class="gallery-fade-left"></div>
+    <div class="gallery-fade-right"></div>
+  </footer>
+
+  <!-- Add Tape Modal -->
+  <div id="modal-add-tape" class="modal-overlay">
+    <div class="modal-panel">
+      <div class="modal-header">
+        <h2>添加新磁带</h2>
+        <button class="modal-close" data-close="modal-add-tape">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label>磁带名称</label>
+          <input type="text" id="input-tape-name" placeholder="给磁带起个名字..." maxlength="30">
+        </div>
+        <div class="form-group">
+          <label>主题颜色</label>
+          <div class="color-picker-row">
+            <input type="color" id="input-tape-color" value="#ff6b6b">
+            <span class="color-hex" id="color-hex">#ff6b6b</span>
+          </div>
+        </div>
+        <div class="form-group">
+          <label>上传音乐</label>
+          <div class="file-upload-box" id="upload-music-box">
+            <input type="file" id="input-music-file" accept="audio/*" hidden>
+            <div class="upload-placeholder">
+              <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>
+              <span>点击上传音乐文件</span>
+              <span class="upload-hint">支持 MP3, WAV, OGG, FLAC</span>
+            </div>
+            <div class="upload-preview" id="music-preview" style="display:none">
+              <span class="preview-icon">🎵</span>
+              <span class="preview-name" id="music-preview-name"></span>
+              <button class="preview-remove" id="music-preview-remove">&times;</button>
+            </div>
+          </div>
+        </div>
+        <div class="form-group">
+          <label>上传照片</label>
+          <div class="file-upload-box" id="upload-photos-box">
+            <input type="file" id="input-photo-files" accept="image/*" multiple hidden>
+            <div class="upload-placeholder">
+              <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+              <span>点击上传照片</span>
+              <span class="upload-hint">可多选 · 自动压缩优化</span>
+            </div>
+            <div class="upload-preview" id="photos-preview" style="display:none">
+              <span class="preview-icon">🖼️</span>
+              <span class="preview-name" id="photos-preview-count"></span>
+              <button class="preview-remove" id="photos-preview-remove">&times;</button>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn-secondary" data-close="modal-add-tape">取消</button>
+        <button class="btn-primary" id="btn-confirm-add-tape">确认添加</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Edit Tape Modal -->
+  <div id="modal-edit-tape" class="modal-overlay">
+    <div class="modal-panel">
+      <div class="modal-header">
+        <h2>编辑磁带</h2>
+        <button class="modal-close" data-close="modal-edit-tape">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label>磁带名称</label>
+          <input type="text" id="input-edit-name" maxlength="30">
+        </div>
+        <div class="form-group">
+          <label>主题颜色</label>
+          <div class="color-picker-row">
+            <input type="color" id="input-edit-color" value="#ff6b6b">
+            <span class="color-hex" id="color-hex-edit">#ff6b6b</span>
+          </div>
+        </div>
+        <div class="form-group">
+          <label>追加照片</label>
+          <div class="file-upload-box" id="upload-edit-photos-box">
+            <input type="file" id="input-edit-photos" accept="image/*" multiple hidden>
+            <div class="upload-placeholder">
+              <span>点击追加新照片</span>
+            </div>
+          </div>
+        </div>
+        <div class="form-group">
+          <button class="btn-danger-outline" id="btn-delete-tape">删除此磁带</button>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn-secondary" data-close="modal-edit-tape">取消</button>
+        <button class="btn-primary" id="btn-confirm-edit-tape">保存修改</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Full Screen Gallery Modal -->
+  <div id="modal-gallery-full" class="modal-overlay modal-gallery-overlay">
+    <div class="gallery-full-panel">
+      <div class="gallery-full-header">
+        <div class="gallery-full-search">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+          <input type="text" id="gallery-search-input" placeholder="搜索磁带名称..." autocomplete="off">
+        </div>
+        <span class="gallery-full-count" id="gallery-count"></span>
+        <button class="modal-close" data-close="modal-gallery-full">&times;</button>
+      </div>
+      <div class="gallery-full-grid" id="gallery-full-grid">
+        <!-- dynamically filled -->
+      </div>
+      <div class="gallery-full-empty" id="gallery-empty-state" style="display:none">
+        <p>还没有磁带，点击上方「添加音乐」创建第一个</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast Container -->
+  <div id="toast-container"></div>
+
+  <!-- Delete Confirmation Modal -->
+  <div id="modal-confirm-delete" class="modal-overlay">
+    <div class="modal-panel modal-panel-sm">
+      <div class="modal-header">
+        <h2>确认删除</h2>
+        <button class="modal-close" data-close="modal-confirm-delete">&times;</button>
+      </div>
+      <div class="modal-body">
+        <p>确定要删除磁带「<strong id="delete-tape-name"></strong>」吗？</p>
+        <p class="text-muted">此操作不可撤销，音乐和照片将一并删除。</p>
+      </div>
+      <div class="modal-footer">
+        <button class="btn-secondary" data-close="modal-confirm-delete">取消</button>
+        <button class="btn-danger" id="btn-confirm-delete">删除</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="js/storage.js"></script>
+  <script src="js/tape-store.js"></script>
+  <script src="js/player.js"></script>
+  <script src="js/drag-drop.js"></script>
+  <script src="js/gallery.js"></script>
+  <script src="js/photos.js"></script>
+  <script src="js/ui.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
