@@ -504,7 +504,6 @@ img { display: block; max-width: 100%; }
 
 /* Dragging state */
 .tape-item.dragging {
-  transform: scale(1.08) !important;
   box-shadow: 0 16px 40px rgba(0,0,0,0.6) !important;
   z-index: 200 !important;
   cursor: grabbing;
