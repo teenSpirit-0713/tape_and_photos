@@ -229,7 +229,7 @@ img { display: block; max-width: 100%; }
   display: none;
 }
 
-.player-tape-slot.active { display: block; }
+.player-tape-slot.active { display: block; will-change: transform, opacity; }
 
 .slot-shell {
   width: 100%; height: 100%;
@@ -509,6 +509,7 @@ img { display: block; max-width: 100%; }
   z-index: 200 !important;
   cursor: grabbing;
   opacity: 0.95;
+  will-change: transform;
 }
 
 /* ---------- Bottom Gallery ---------- */
@@ -795,6 +796,7 @@ img { display: block; max-width: 100%; }
   box-shadow: var(--shadow-md);
   pointer-events: none;
   will-change: transform, opacity;
+  backface-visibility: hidden;
 }
 
 /* ---------- Toast ---------- */
