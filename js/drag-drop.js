@@ -188,14 +188,25 @@ function onPointerUp(e) {
   const tape = getTapeById(tapeId);
 
   if (isOverPlayer && !isFromPlayer) {
-    // Gallery tape dropped on player → load
-    animateTapeToPlayer(ghost, playerRect, () => {
-      ghost.remove();
+    // Gallery tape dropped on player → fly in, crossfade to slot
+    if (tape) {
+      // Pre-hide slot so it can animate in
+      const slot = document.getElementById('player-tape-slot');
+      gsap.set(slot, { opacity: 0, scale: 0.9 });
+    }
+
+    animateTapeToPlayer(ghost, playerRect, (ghostRef) => {
       tapeEl.style.opacity = '1';
       if (tape) {
         loadTape(tape);
+        // Slot pops in while ghost fades out → seamless morph
+        const slot = document.getElementById('player-tape-slot');
+        gsap.to(slot, { opacity: 1, scale: 1, duration: 0.28, ease: 'back.out(1.5)' });
+        gsap.to(ghostRef, { opacity: 0, duration: 0.22, onComplete: () => ghostRef.remove() });
         play();
         if (typeof onTapeLoaded === 'function') onTapeLoaded(tape);
+      } else {
+        ghostRef.remove();
       }
       dragState = null;
     });
@@ -251,33 +262,29 @@ function animateTapeToPlayer(ghost, playerRect, onComplete) {
   const ghostW = ghostRect.width;
   const ghostH = ghostRect.height;
 
-  // Center of player
   const pcx = playerRect.left + playerRect.width / 2;
   const pcy = playerRect.top + playerRect.height / 2;
 
-  // Target: ghost center → player center
   const targetLeft = pcx - ghostW / 2;
   const targetTop = pcy - ghostH / 2;
 
-  // Scale to fit player (with max cap)
   const scaleW = playerRect.width / ghostW;
   const scaleH = playerRect.height / ghostH;
   const scale = Math.min(scaleW, scaleH, 3);
 
-  // Scale from own center so it grows in place while moving
   ghost.style.transformOrigin = '50% 50%';
 
+  // Fly ghost to player position, scale up — keep it visible (no fade)
   gsap.to(ghost, {
     left: targetLeft + 'px',
     top: targetTop + 'px',
     scaleX: scale,
     scaleY: scale,
-    opacity: 0,
-    duration: 0.55,
+    duration: 0.5,
     ease: 'power3.inOut',
     onComplete: () => {
       ghost.style.transformOrigin = '';
-      onComplete();
+      onComplete(ghost);
     }
   });
 }
@@ -301,10 +308,10 @@ function animateTapeToGallery(ghost, targetRect, onComplete) {
 }
 
 // Public: load a tape into player programmatically (click/dblclick, not drag)
-let loadingTapeId = null; // prevent concurrent load animations
+let loadingTapeId = null;
 
 function loadTapeToPlayer(tapeId) {
-  if (loadingTapeId === tapeId) return; // already animating this tape
+  if (loadingTapeId === tapeId) return;
   const tape = getTapeById(tapeId);
   if (!tape) return;
 
@@ -314,6 +321,10 @@ function loadTapeToPlayer(tapeId) {
   const galleryTape = document.querySelector(`.tape-item[data-tape-id="${tapeId}"]`);
 
   if (galleryTape) {
+    // Pre-hide the slot so it can animate in smoothly
+    const slot = document.getElementById('player-tape-slot');
+    gsap.set(slot, { opacity: 0, scale: 0.9 });
+
     const rect = galleryTape.getBoundingClientRect();
     const ghost = galleryTape.cloneNode(true);
     ghost.classList.add('dragging');
@@ -329,10 +340,12 @@ function loadTapeToPlayer(tapeId) {
     document.body.appendChild(ghost);
     galleryTape.style.opacity = '0.3';
 
-    animateTapeToPlayer(ghost, playerRect, () => {
-      ghost.remove();
+    animateTapeToPlayer(ghost, playerRect, (ghostRef) => {
       galleryTape.style.opacity = '1';
       loadTape(tape);
+      // Slot pops in as ghost fades → seamless morph
+      gsap.to(slot, { opacity: 1, scale: 1, duration: 0.28, ease: 'back.out(1.5)' });
+      gsap.to(ghostRef, { opacity: 0, duration: 0.22, onComplete: () => ghostRef.remove() });
       play();
       loadingTapeId = null;
       if (typeof onTapeLoaded === 'function') onTapeLoaded(tape);
