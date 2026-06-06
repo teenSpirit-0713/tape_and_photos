@@ -250,35 +250,53 @@ function animateTapeToPlayer(ghost, playerRect, onComplete) {
   const ghostRect = ghost.getBoundingClientRect();
   const ghostW = ghostRect.width;
   const ghostH = ghostRect.height;
-  const targetX = playerRect.left + playerRect.width / 2 - ghostW / 2;
-  const targetY = playerRect.top + playerRect.height / 2 - ghostH / 2;
-  const scaleX = Math.min(380 / ghostW, 2.2);
-  const scaleY = Math.min(280 / ghostH, 2.2);
-  const scale = Math.min(scaleX, scaleY);
 
-  // Clear any transform from previous drag, animate left/top directly
-  ghost.style.transform = '';
+  // Center of player
+  const pcx = playerRect.left + playerRect.width / 2;
+  const pcy = playerRect.top + playerRect.height / 2;
+
+  // Target: ghost center → player center
+  const targetLeft = pcx - ghostW / 2;
+  const targetTop = pcy - ghostH / 2;
+
+  // Scale to fit player (with max cap)
+  const scaleW = playerRect.width / ghostW;
+  const scaleH = playerRect.height / ghostH;
+  const scale = Math.min(scaleW, scaleH, 3);
+
+  // Scale from own center so it grows in place while moving
+  ghost.style.transformOrigin = '50% 50%';
+
   gsap.to(ghost, {
-    left: targetX + 'px',
-    top: targetY + 'px',
-    scaleX: scale, scaleY: scale,
+    left: targetLeft + 'px',
+    top: targetTop + 'px',
+    scaleX: scale,
+    scaleY: scale,
     opacity: 0,
-    duration: 0.5,
-    ease: 'power2.inOut',
-    onComplete
+    duration: 0.55,
+    ease: 'power3.inOut',
+    onComplete: () => {
+      ghost.style.transformOrigin = '';
+      onComplete();
+    }
   });
 }
 
 function animateTapeToGallery(ghost, targetRect, onComplete) {
-  ghost.style.transform = '';
+  ghost.style.transformOrigin = '50% 50%';
+
   gsap.to(ghost, {
     left: targetRect.left + 'px',
     top: targetRect.top + 'px',
-    scaleX: 1, scaleY: 1,
+    scaleX: 1,
+    scaleY: 1,
     opacity: 0.7,
     duration: 0.5,
-    ease: 'power2.in',
-    onComplete
+    ease: 'power3.in',
+    onComplete: () => {
+      ghost.style.transformOrigin = '';
+      onComplete();
+    }
   });
 }
 
