@@ -4,11 +4,14 @@
  */
 
 let breathingActive = false;
-let breathingInterval = null;
-let activePhotoEls = [];
+let breathingTimer = null;
+let activeCount = 0;
 let photoStage = null;
-let photoDataCache = [];
+let photoDataCache = [];  // stores photo objects with blobs, NOT urls
 let photoIndex = 0;
+
+const MAX_VISIBLE = 3;
+const PULSE_INTERVAL = 2200;
 
 function initPhotos() {
   photoStage = document.getElementById('photo-stage');
@@ -21,41 +24,42 @@ async function startBreathing(tapeId) {
   if (photos.length === 0) return;
 
   breathingActive = true;
-  activePhotoEls = [];
-  photoDataCache = [];
+  activeCount = 0;
+  photoDataCache = photos.slice(); // copy photo objects (with blobs)
   photoIndex = 0;
 
-  for (const photo of photos) {
-    const url = await getPhotoBlobURL(photo);
-    photoDataCache.push({ url, id: photo.id });
-  }
-
-  if (!breathingActive || photoDataCache.length === 0) return;
   photoDataCache.sort(() => Math.random() - 0.5);
 
-  // Show first photo immediately, then keep a steady pulse
   showNextPhoto();
-  breathingInterval = setInterval(() => {
-    activePhotoEls = activePhotoEls.filter(el => el.parentNode);
-    if (activePhotoEls.length < 3 && breathingActive) {
+  scheduleNext();
+}
+
+function scheduleNext() {
+  if (!breathingActive) return;
+  breathingTimer = setTimeout(() => {
+    if (activeCount < MAX_VISIBLE && breathingActive) {
       showNextPhoto();
     }
-  }, 2200);
+    scheduleNext(); // always re-schedule to keep checking
+  }, PULSE_INTERVAL);
 }
 
 function showNextPhoto() {
   if (!breathingActive) return;
-
-  activePhotoEls = activePhotoEls.filter(el => el.parentNode);
-  if (activePhotoEls.length >= 3) return;
+  if (activeCount >= MAX_VISIBLE) return;
 
   const photo = photoDataCache[photoIndex % photoDataCache.length];
   photoIndex++;
 
+  // Create a fresh blob URL for this appearance
+  const blob = new Blob([photo.blob], { type: photo.mimeType || 'image/jpeg' });
+  const url = URL.createObjectURL(blob);
+
   const img = document.createElement('img');
   img.className = 'breathing-photo';
+  img._blobUrl = url;
   photoStage.appendChild(img);
-  activePhotoEls.push(img);
+  activeCount++;
 
   const stageW = photoStage.clientWidth;
   const stageH = photoStage.clientHeight;
@@ -92,8 +96,14 @@ function showNextPhoto() {
   img.style.borderRadius = '8px';
   img.style.boxShadow = '0 8px 32px rgba(0,0,0,0.5)';
 
-  function startPhotoAnimation() {
-    // fade in → hold → fade out → remove
+  function cleanup() {
+    activeCount--;
+    gsap.killTweensOf(img);
+    if (url) URL.revokeObjectURL(url);
+    if (img.parentNode) img.remove();
+  }
+
+  function startAnim() {
     gsap.to(img, {
       opacity: 1,
       scale: 1.02,
@@ -101,20 +111,17 @@ function showNextPhoto() {
       duration: 1.8,
       ease: 'power2.inOut',
       onComplete: () => {
-        if (!breathingActive) { removePhotoEl(img); return; }
+        if (!breathingActive) { cleanup(); return; }
         gsap.to(img, {
           opacity: 1, scale: 1.04,
           duration: 3.5,
           ease: 'none',
           onComplete: () => {
-            if (!breathingActive) { removePhotoEl(img); return; }
+            if (!breathingActive) { cleanup(); return; }
             gsap.to(img, {
               opacity: 0, scale: 1.08,
               duration: 2.2, ease: 'power2.in', delay: 0.3,
-              onComplete: () => {
-                removePhotoEl(img);
-                activePhotoEls = activePhotoEls.filter(el => el !== img);
-              }
+              onComplete: cleanup
             });
           }
         });
@@ -122,58 +129,55 @@ function showNextPhoto() {
     });
   }
 
-  // Wait for image to load before animating
   if (img.complete && img.naturalWidth > 0) {
-    startPhotoAnimation();
+    startAnim();
   } else {
-    img.onload = startPhotoAnimation;
-    img.onerror = () => {
-      // Image failed to load, remove silently
-      activePhotoEls = activePhotoEls.filter(el => el !== img);
-      if (img.parentNode) img.remove();
-    };
+    img.onload = startAnim;
+    img.onerror = () => cleanup();
   }
 
-  img.src = photo.url;
-  img.dataset.blobUrl = photo.url;
-}
-
-function removePhotoEl(el) {
-  gsap.killTweensOf(el);
-  if (el.dataset.blobUrl) URL.revokeObjectURL(el.dataset.blobUrl);
-  if (el.parentNode) el.remove();
+  img.src = url;
 }
 
 function stopBreathing() {
   breathingActive = false;
-  if (breathingInterval) { clearInterval(breathingInterval); breathingInterval = null; }
-  activePhotoEls.forEach(el => removePhotoEl(el));
-  activePhotoEls = [];
-  photoDataCache.forEach(p => URL.revokeObjectURL(p.url));
-  photoDataCache = [];
+  if (breathingTimer) { clearTimeout(breathingTimer); breathingTimer = null; }
+  // Clean up all photo elements in stage
   if (photoStage) {
-    photoStage.querySelectorAll('.breathing-photo').forEach(el => removePhotoEl(el));
+    photoStage.querySelectorAll('.breathing-photo').forEach(el => {
+      gsap.killTweensOf(el);
+      if (el._blobUrl) URL.revokeObjectURL(el._blobUrl);
+      if (el.parentNode) el.remove();
+    });
   }
+  activeCount = 0;
+  photoDataCache = [];
 }
 
 function pauseBreathing() {
   if (!breathingActive) return;
-  if (breathingInterval) { clearInterval(breathingInterval); breathingInterval = null; }
-  activePhotoEls.forEach(el => gsap.killTweensOf(el));
+  if (breathingTimer) { clearTimeout(breathingTimer); breathingTimer = null; }
+  if (photoStage) {
+    photoStage.querySelectorAll('.breathing-photo').forEach(el => {
+      gsap.killTweensOf(el);
+    });
+  }
 }
 
 function resumeBreathing() {
   if (!breathingActive) return;
   const tapeId = getActiveTapeId();
   if (!tapeId) return;
-  activePhotoEls.forEach(el => removePhotoEl(el));
-  activePhotoEls = [];
+  // Clean existing elements
+  if (photoStage) {
+    photoStage.querySelectorAll('.breathing-photo').forEach(el => {
+      gsap.killTweensOf(el);
+      if (el._blobUrl) URL.revokeObjectURL(el._blobUrl);
+      if (el.parentNode) el.remove();
+    });
+  }
+  activeCount = 0;
   photoIndex = 0;
-  breathingInterval = setInterval(() => {
-    activePhotoEls = activePhotoEls.filter(el => el.parentNode);
-    if (activePhotoEls.length < 3 && breathingActive) {
-      showNextPhoto();
-    }
-  }, 2200);
   showNextPhoto();
+  scheduleNext();
 }
