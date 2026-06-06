@@ -62,7 +62,7 @@ function onPointerDown(e) {
       ghost.innerHTML = `<div class="tape-screw tl"></div><div class="tape-screw tr"></div><div class="tape-screw bl"></div><div class="tape-screw br"></div><div class="tape-label-top"></div><div class="tape-label-bottom"></div><div class="tape-window"><div class="tape-reel left"></div><div class="tape-path"></div><div class="tape-reel right"></div></div><div class="tape-name-label">${escapeHtml(tape.name)}</div>`;
     }
     document.body.appendChild(ghost);
-    gsap.set(ghost, { scale: 1.08 });
+    ghost.style.transform = 'scale(1.08)';
     tapeEl.style.opacity = '0.4';
     dragState = {
       tapeId, tapeEl, ghost,
@@ -85,7 +85,7 @@ function onPointerDown(e) {
     clone.style.pointerEvents = 'none';
     clone.style.willChange = 'transform';
     document.body.appendChild(clone);
-    gsap.set(clone, { scale: 1.08 });
+    clone.style.transform = 'scale(1.08)';
     tapeEl.style.opacity = '0.3';
     dragState = {
       tapeId, tapeEl, ghost: clone,
@@ -105,10 +105,11 @@ function onPointerMove(e) {
   if (!dragState.hasMoved && Math.abs(dx) < MIN_DRAG_DIST && Math.abs(dy) < MIN_DRAG_DIST) return;
   dragState.hasMoved = true;
 
-  // GPU-accelerated: translate from origin + slight lift scale
-  const tx = e.clientX - dragState.offsetX - dragState.originLeft;
-  const ty = e.clientY - dragState.offsetY - dragState.originTop;
-  gsap.set(dragState.ghost, { x: tx, y: ty, scale: 1.08 });
+  // Direct left/top for natural drag feel
+  const x = e.clientX - dragState.offsetX;
+  const y = e.clientY - dragState.offsetY;
+  dragState.ghost.style.left = x + 'px';
+  dragState.ghost.style.top = y + 'px';
 
   const ghostRect = dragState.ghost.getBoundingClientRect();
   const ghostCX = ghostRect.left + ghostRect.width / 2;
@@ -207,7 +208,7 @@ function flyGhostToPlayer(ghost, ghostRect, playerRect, onComplete) {
   ghost.style.transformOrigin = '50% 50%';
 
   gsap.fromTo(ghost,
-    { x: deltaX, y: deltaY, scaleX: 1, scaleY: 1 },
+    { x: deltaX, y: deltaY, scaleX: 1.08, scaleY: 1.08 },
     { x: 0, y: 0, scaleX: scale, scaleY: scale, duration: 0.5, ease: 'power3.inOut',
       onComplete: () => { ghost.style.transformOrigin = ''; onComplete(); }
     }
