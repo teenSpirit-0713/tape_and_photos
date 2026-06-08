@@ -509,6 +509,7 @@ img { display: block; max-width: 100%; }
   cursor: grabbing;
   opacity: 0.95;
   will-change: transform;
+  transition: none !important;
 }
 
 /* ---------- Bottom Gallery ---------- */

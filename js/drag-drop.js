@@ -69,6 +69,8 @@ function onPointerDown(e) {
       startX: e.clientX, startY: e.clientY,
       originLeft: rect.left, originTop: rect.top,
       offsetX: e.clientX - rect.left, offsetY: e.clientY - rect.top,
+      width: rect.width, height: rect.height,
+      playerRect: getPlayerRect(),
       isFromPlayer: true, isGalleryTape: false, hasMoved: false
     };
   } else {
@@ -92,6 +94,8 @@ function onPointerDown(e) {
       startX: e.clientX, startY: e.clientY,
       originLeft: rect.left, originTop: rect.top,
       offsetX: e.clientX - rect.left, offsetY: e.clientY - rect.top,
+      width: rect.width, height: rect.height,
+      playerRect: getPlayerRect(),
       isFromPlayer: false, isGalleryTape: true, hasMoved: false
     };
   }
@@ -105,19 +109,21 @@ function onPointerMove(e) {
   if (!dragState.hasMoved && Math.abs(dx) < MIN_DRAG_DIST && Math.abs(dy) < MIN_DRAG_DIST) return;
   dragState.hasMoved = true;
 
-  // GPU-accelerated: direct transform string, no GSAP overhead
+  // GPU-accelerated: direct transform string
   const screenX = e.clientX - dragState.offsetX;
   const screenY = e.clientY - dragState.offsetY;
   const tx = screenX - dragState.originLeft;
   const ty = screenY - dragState.originTop;
   dragState.ghost.style.transform = `translate(${tx}px, ${ty}px) scale(1.08)`;
 
-  const ghostRect = dragState.ghost.getBoundingClientRect();
-  const ghostCX = ghostRect.left + ghostRect.width / 2;
-  const ghostCY = ghostRect.top + ghostRect.height / 2;
-  const playerRect = getPlayerRect();
-  const isOver = ghostCX > playerRect.left && ghostCX < playerRect.right &&
-                 ghostCY > playerRect.top  && ghostCY < playerRect.bottom;
+  // Hit test via math (avoid getBoundingClientRect forced reflow)
+  const scale = 1.08;
+  const w = dragState.width * scale;
+  const h = dragState.height * scale;
+  const cx = screenX + w / 2;
+  const cy = screenY + h / 2;
+  const pr = dragState.playerRect;
+  const isOver = cx > pr.left && cx < pr.right && cy > pr.top && cy < pr.bottom;
   playerZoneEl.classList.toggle('drag-hover', isOver);
 }
 
@@ -135,7 +141,16 @@ function onPointerUp(e) {
     return;
   }
 
-  const ghostRect = ghost.getBoundingClientRect();
+  // Calculate ghost rect from drag state (avoid getBoundingClientRect reflow)
+  const scale = 1.08;
+  const gw = dragState.width * scale;
+  const gh = dragState.height * scale;
+  // Last known screenX/screenY from the pointer position
+  const lastX = (e.clientX - dragState.offsetX) || dragState.originLeft;
+  const lastY = (e.clientY - dragState.offsetY) || dragState.originTop;
+  const ghostRect = {
+    left: lastX, top: lastY, width: gw, height: gh
+  };
   const ghostCX = ghostRect.left + ghostRect.width / 2;
   const ghostCY = ghostRect.top + ghostRect.height / 2;
   const playerRect = getPlayerRect();
@@ -147,15 +162,25 @@ function onPointerUp(e) {
     // Drop on player: fly ghost in → crossfade to slot
     if (tape) {
       const slot = document.getElementById('player-tape-slot');
-      gsap.set(slot, { opacity: 0, scale: 0.92 });
+      slot.style.transition = 'none';
+      slot.style.opacity = '0';
+      slot.style.transform = 'scale(0.92)';
     }
-    flyGhostToPlayer(ghost, ghostRect, playerRect, () => {
+    // Use a fresh getBoundingClientRect for the accurate fly animation
+    const flyRect = ghost.getBoundingClientRect();
+    flyGhostToPlayer(ghost, flyRect, playerRect, () => {
       tapeEl.style.opacity = '1';
       if (tape) {
         loadTape(tape);
         const slot = document.getElementById('player-tape-slot');
-        gsap.to(slot, { opacity: 1, scale: 1, duration: 0.25, ease: 'back.out(1.4)' });
-        gsap.to(ghost, { opacity: 0, duration: 0.18, onComplete: () => ghost.remove() });
+        // Slot pop-in
+        slot.style.transition = 'transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1), opacity 0.25s ease';
+        slot.style.opacity = '1';
+        slot.style.transform = 'scale(1)';
+        // Ghost fades over it
+        ghost.style.transition = 'opacity 0.18s';
+        ghost.style.opacity = '0';
+        ghost.addEventListener('transitionend', () => ghost.remove(), { once: true });
         play();
         if (typeof onTapeLoaded === 'function') onTapeLoaded(tape);
       } else {
@@ -167,9 +192,10 @@ function onPointerUp(e) {
     stop();
     stopBreathing();
     const targetEl = document.querySelector(`.tape-item[data-tape-id="${tapeId}"]`);
+    const flyRect = ghost.getBoundingClientRect();
     const targetRect = targetEl ? targetEl.getBoundingClientRect()
       : { left: ghostRect.left, top: window.innerHeight - 140, width: ghostRect.width, height: ghostRect.height };
-    flyGhostToTarget(ghost, ghostRect, targetRect, () => {
+    flyGhostToTarget(ghost, flyRect, targetRect, () => {
       ghost.remove();
       tapeEl.style.opacity = '1';
       if (targetEl) targetEl.style.opacity = '1';
@@ -214,18 +240,25 @@ function flyGhostToPlayer(ghost, ghostRect, playerRect, onComplete) {
   const scaleH = playerRect.height / gh;
   const scale = Math.min(scaleW, scaleH, 3);
 
-  // Snap to target position, clear manual transform, let GSAP take over
+  // Set final position, then use transform to shift back to current visual spot.
+  // CSS transition animates translate from deltaX→0 and scale from 1.08→target.
   ghost.style.left = targetLeft + 'px';
   ghost.style.top = targetTop + 'px';
-  ghost.style.transform = '';
   ghost.style.transformOrigin = '50% 50%';
+  ghost.style.transform = `translate(${deltaX}px, ${deltaY}px) scale(1.08)`;
+  ghost.style.transition = 'none';
 
-  gsap.fromTo(ghost,
-    { x: deltaX, y: deltaY, scaleX: 1.08, scaleY: 1.08 },
-    { x: 0, y: 0, scaleX: scale, scaleY: scale, duration: 0.5, ease: 'power3.inOut',
-      onComplete: () => { ghost.style.transformOrigin = ''; onComplete(); }
-    }
-  );
+  // Force the above styles to render, then kick off the transition
+  ghost.offsetHeight;
+  ghost.style.transition = 'transform 0.5s cubic-bezier(0.4, 0, 0.2, 1)';
+  ghost.style.transform = `translate(0px, 0px) scale(${scale})`;
+
+  ghost.addEventListener('transitionend', function handler() {
+    ghost.removeEventListener('transitionend', handler);
+    ghost.style.transition = 'none';
+    ghost.style.transformOrigin = '';
+    onComplete();
+  });
 }
 
 function flyGhostToTarget(ghost, ghostRect, targetRect, onComplete) {
@@ -236,14 +269,20 @@ function flyGhostToTarget(ghost, ghostRect, targetRect, onComplete) {
 
   ghost.style.left = targetRect.left + 'px';
   ghost.style.top = targetRect.top + 'px';
-  ghost.style.transform = '';
+  ghost.style.transformOrigin = '50% 50%';
+  ghost.style.transform = `translate(${deltaX}px, ${deltaY}px) scale(1.08)`;
+  ghost.style.transition = 'none';
 
-  gsap.fromTo(ghost,
-    { x: deltaX, y: deltaY },
-    { x: 0, y: 0, scaleX: 1, scaleY: 1, duration: 0.45, ease: 'power3.in',
-      onComplete: () => onComplete()
-    }
-  );
+  ghost.offsetHeight;
+  ghost.style.transition = 'transform 0.45s cubic-bezier(0.4, 0, 0.2, 1)';
+  ghost.style.transform = 'translate(0px, 0px) scale(1)';
+
+  ghost.addEventListener('transitionend', function handler() {
+    ghost.removeEventListener('transitionend', handler);
+    ghost.style.transition = 'none';
+    ghost.style.transformOrigin = '';
+    onComplete();
+  });
 }
 
 /* ---- Public: click-to-load ---- */
@@ -277,13 +316,19 @@ function loadTapeToPlayer(tapeId) {
     galleryTape.style.opacity = '0.3';
 
     const slot = document.getElementById('player-tape-slot');
-    gsap.set(slot, { opacity: 0, scale: 0.92 });
+    slot.style.transition = 'none';
+    slot.style.opacity = '0';
+    slot.style.transform = 'scale(0.92)';
 
     flyGhostToPlayer(ghost, rect, playerRect, () => {
       galleryTape.style.opacity = '1';
       loadTape(tape);
-      gsap.to(slot, { opacity: 1, scale: 1, duration: 0.25, ease: 'back.out(1.4)' });
-      gsap.to(ghost, { opacity: 0, duration: 0.18, onComplete: () => ghost.remove() });
+      slot.style.transition = 'transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1), opacity 0.25s ease';
+      slot.style.opacity = '1';
+      slot.style.transform = 'scale(1)';
+      ghost.style.transition = 'opacity 0.18s';
+      ghost.style.opacity = '0';
+      ghost.addEventListener('transitionend', () => ghost.remove(), { once: true });
       play();
       loadingTapeId = null;
       if (typeof onTapeLoaded === 'function') onTapeLoaded(tape);
