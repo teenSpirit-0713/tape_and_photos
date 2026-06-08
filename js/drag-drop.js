@@ -1,6 +1,6 @@
 /**
- * Drag & Drop — GPU-accelerated via CSS transform (translate + scale).
- * Pointer Events for input, GSAP for animation.
+ * Drag & Drop — simple and reliable.
+ * Drag: left/top (natural feel). Fly: GSAP (one-shot, ok for animation).
  */
 
 let dragState = null;
@@ -21,20 +21,18 @@ function onPointerDown(e) {
 
   let tapeEl = e.target.closest('.tape-item');
   let tapeId = null;
-  let isFromPlayer = false;
-  let isGalleryTape = false;
+  let isGallery = false;
 
   if (tapeEl) {
     tapeId = tapeEl.dataset.tapeId;
-    isGalleryTape = true;
+    isGallery = true;
   } else {
-    const slotShell = e.target.closest('.slot-shell');
-    if (slotShell) {
+    const shell = e.target.closest('.slot-shell');
+    if (shell) {
       const slot = document.getElementById('player-tape-slot');
       if (slot && slot.classList.contains('active')) {
+        tapeEl = shell;
         tapeId = getCurrentTapeId();
-        tapeEl = slotShell;
-        isFromPlayer = true;
       }
     }
   }
@@ -42,145 +40,111 @@ function onPointerDown(e) {
   if (!tapeEl || !tapeId) return;
 
   const rect = tapeEl.getBoundingClientRect();
-  const ghost = document.createElement('div');
 
-  if (isFromPlayer) {
-    ghost.className = 'tape-item dragging';
-    ghost.style.position = 'fixed';
-    ghost.style.left = rect.left + 'px';
-    ghost.style.top = rect.top + 'px';
-    ghost.style.width = rect.width + 'px';
-    ghost.style.height = rect.height + 'px';
-    ghost.style.margin = '0';
-    ghost.style.flex = 'none';
-    ghost.style.zIndex = '200';
-    ghost.style.pointerEvents = 'none';
-    ghost.style.willChange = 'transform';
-    const tape = getTapeById(tapeId);
-    if (tape) {
-      ghost.style.setProperty('--tape-color', tape.color);
-      ghost.innerHTML = `<div class="tape-screw tl"></div><div class="tape-screw tr"></div><div class="tape-screw bl"></div><div class="tape-screw br"></div><div class="tape-label-top"></div><div class="tape-label-bottom"></div><div class="tape-window"><div class="tape-reel left"></div><div class="tape-path"></div><div class="tape-reel right"></div></div><div class="tape-name-label">${escapeHtml(tape.name)}</div>`;
-    }
-    document.body.appendChild(ghost);
-    ghost.style.transform = 'scale(1.08)';
-    tapeEl.style.opacity = '0.4';
-    dragState = {
-      tapeId, tapeEl, ghost,
-      startX: e.clientX, startY: e.clientY,
-      originLeft: rect.left, originTop: rect.top,
-      offsetX: e.clientX - rect.left, offsetY: e.clientY - rect.top,
-      width: rect.width, height: rect.height,
-      playerRect: getPlayerRect(),
-      isFromPlayer: true, isGalleryTape: false, hasMoved: false
-    };
-  } else {
-    const clone = tapeEl.cloneNode(true);
-    clone.classList.add('dragging');
-    clone.style.position = 'fixed';
-    clone.style.left = rect.left + 'px';
-    clone.style.top = rect.top + 'px';
-    clone.style.width = rect.width + 'px';
-    clone.style.height = rect.height + 'px';
-    clone.style.margin = '0';
-    clone.style.flex = 'none';
-    clone.style.zIndex = '200';
-    clone.style.pointerEvents = 'none';
-    clone.style.willChange = 'transform';
-    document.body.appendChild(clone);
-    clone.style.transform = 'scale(1.08)';
-    tapeEl.style.opacity = '0.3';
-    dragState = {
-      tapeId, tapeEl, ghost: clone,
-      startX: e.clientX, startY: e.clientY,
-      originLeft: rect.left, originTop: rect.top,
-      offsetX: e.clientX - rect.left, offsetY: e.clientY - rect.top,
-      width: rect.width, height: rect.height,
-      playerRect: getPlayerRect(),
-      isFromPlayer: false, isGalleryTape: true, hasMoved: false
-    };
-  }
+  // Build ghost
+  const ghost = document.createElement('div');
+  ghost.className = 'tape-item dragging';
+  ghost.style.position = 'fixed';
+  ghost.style.left = rect.left + 'px';
+  ghost.style.top = rect.top + 'px';
+  ghost.style.width = rect.width + 'px';
+  ghost.style.height = rect.height + 'px';
+  ghost.style.margin = '0';
+  ghost.style.zIndex = '200';
+  ghost.style.pointerEvents = 'none';
+
+  const tape = getTapeById(tapeId);
+  ghost.style.setProperty('--tape-color', tape ? tape.color : '#ff6b6b');
+  ghost.innerHTML =
+    '<div class="tape-screw tl"></div><div class="tape-screw tr"></div>' +
+    '<div class="tape-screw bl"></div><div class="tape-screw br"></div>' +
+    '<div class="tape-label-top"></div><div class="tape-label-bottom"></div>' +
+    '<div class="tape-window"><div class="tape-reel left"></div><div class="tape-path"></div><div class="tape-reel right"></div></div>' +
+    '<div class="tape-name-label">' + escapeHtml(tape ? tape.name : '') + '</div>';
+
+  document.body.appendChild(ghost);
+  tapeEl.style.opacity = '0.3';
+
+  dragState = {
+    tapeId, tapeEl, ghost,
+    startX: e.clientX, startY: e.clientY,
+    offsetX: e.clientX - rect.left,
+    offsetY: e.clientY - rect.top,
+    width: rect.width, height: rect.height,
+    playerRect: getPlayerRect(),
+    isGallery, hasMoved: false
+  };
 }
 
 function onPointerMove(e) {
   if (!dragState) return;
 
-  const dx = e.clientX - dragState.startX;
-  const dy = e.clientY - dragState.startY;
-  if (!dragState.hasMoved && Math.abs(dx) < MIN_DRAG_DIST && Math.abs(dy) < MIN_DRAG_DIST) return;
-  dragState.hasMoved = true;
+  if (!dragState.hasMoved) {
+    var dx = e.clientX - dragState.startX;
+    var dy = e.clientY - dragState.startY;
+    if (Math.abs(dx) < MIN_DRAG_DIST && Math.abs(dy) < MIN_DRAG_DIST) return;
+    dragState.hasMoved = true;
+  }
 
-  // GPU-accelerated: direct transform string
-  const screenX = e.clientX - dragState.offsetX;
-  const screenY = e.clientY - dragState.offsetY;
-  const tx = screenX - dragState.originLeft;
-  const ty = screenY - dragState.originTop;
-  dragState.ghost.style.transform = `translate(${tx}px, ${ty}px) scale(1.08)`;
+  dragState.ghost.style.left = (e.clientX - dragState.offsetX) + 'px';
+  dragState.ghost.style.top = (e.clientY - dragState.offsetY) + 'px';
 
-  // Hit test via math (avoid getBoundingClientRect forced reflow)
-  const scale = 1.08;
-  const w = dragState.width * scale;
-  const h = dragState.height * scale;
-  const cx = screenX + w / 2;
-  const cy = screenY + h / 2;
-  const pr = dragState.playerRect;
-  const isOver = cx > pr.left && cx < pr.right && cy > pr.top && cy < pr.bottom;
-  playerZoneEl.classList.toggle('drag-hover', isOver);
+  // Hit test from stored values (no reflow)
+  var cx = (e.clientX - dragState.offsetX) + dragState.width / 2;
+  var cy = (e.clientY - dragState.offsetY) + dragState.height / 2;
+  var pr = dragState.playerRect;
+  playerZoneEl.classList.toggle('drag-hover',
+    cx > pr.left && cx < pr.right && cy > pr.top && cy < pr.bottom);
 }
 
 function onPointerUp(e) {
   if (!dragState) return;
   playerZoneEl.classList.remove('drag-hover');
 
-  const { ghost, tapeId, tapeEl, isFromPlayer, isGalleryTape, hasMoved } = dragState;
+  var ghost = dragState.ghost;
+  var tapeEl = dragState.tapeEl;
+  var tapeId = dragState.tapeId;
+  var isGallery = dragState.isGallery;
+  var hasMoved = dragState.hasMoved;
 
   if (!hasMoved) {
     ghost.remove();
     tapeEl.style.opacity = '1';
     dragState = null;
-    if (isGalleryTape) loadTapeToPlayer(tapeId);
+    if (isGallery) loadTapeToPlayer(tapeId);
     return;
   }
 
-  // Calculate ghost rect from drag state (avoid getBoundingClientRect reflow)
-  const scale = 1.08;
-  const gw = dragState.width * scale;
-  const gh = dragState.height * scale;
-  // Last known screenX/screenY from the pointer position
-  const lastX = (e.clientX - dragState.offsetX) || dragState.originLeft;
-  const lastY = (e.clientY - dragState.offsetY) || dragState.originTop;
-  const ghostRect = {
-    left: lastX, top: lastY, width: gw, height: gh
-  };
-  const ghostCX = ghostRect.left + ghostRect.width / 2;
-  const ghostCY = ghostRect.top + ghostRect.height / 2;
-  const playerRect = getPlayerRect();
-  const isOverPlayer = ghostCX > playerRect.left && ghostCX < playerRect.right &&
-                       ghostCY > playerRect.top  && ghostCY < playerRect.bottom;
-  const tape = getTapeById(tapeId);
+  // Where is the ghost right now?
+  var ghostLeft = parseFloat(ghost.style.left);
+  var ghostTop = parseFloat(ghost.style.top);
+  var ghostW = dragState.width;
+  var ghostH = dragState.height;
+  var ghostCX = ghostLeft + ghostW / 2;
+  var ghostCY = ghostTop + ghostH / 2;
+  var pr = getPlayerRect();
+  var overPlayer = ghostCX > pr.left && ghostCX < pr.right &&
+                   ghostCY > pr.top && ghostCY < pr.bottom;
 
-  if (isOverPlayer && !isFromPlayer) {
-    // Drop on player: fly ghost in → crossfade to slot
-    if (tape) {
-      const slot = document.getElementById('player-tape-slot');
-      slot.style.transition = 'none';
-      slot.style.opacity = '0';
-      slot.style.transform = 'scale(0.92)';
-    }
-    // Use a fresh getBoundingClientRect for the accurate fly animation
-    const flyRect = ghost.getBoundingClientRect();
-    flyGhostToPlayer(ghost, flyRect, playerRect, () => {
+  var tape = getTapeById(tapeId);
+
+  if (overPlayer && isGallery) {
+    // Drop on player
+    var slot = document.getElementById('player-tape-slot');
+    slot.style.transition = 'none';
+    slot.style.opacity = '0';
+    slot.style.transform = 'scale(0.92)';
+
+    flyGhostIn(ghost, pr, function () {
       tapeEl.style.opacity = '1';
       if (tape) {
         loadTape(tape);
-        const slot = document.getElementById('player-tape-slot');
-        // Slot pop-in
-        slot.style.transition = 'transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1), opacity 0.25s ease';
+        slot.style.transition = 'opacity 0.25s, transform 0.25s cubic-bezier(0.34,1.56,0.64,1)';
         slot.style.opacity = '1';
         slot.style.transform = 'scale(1)';
-        // Ghost fades over it
-        ghost.style.transition = 'opacity 0.18s';
+        ghost.style.transition = 'opacity 0.15s';
         ghost.style.opacity = '0';
-        ghost.addEventListener('transitionend', () => ghost.remove(), { once: true });
+        ghost.addEventListener('transitionend', function () { ghost.remove(); }, { once: true });
         play();
         if (typeof onTapeLoaded === 'function') onTapeLoaded(tape);
       } else {
@@ -188,119 +152,76 @@ function onPointerUp(e) {
       }
       dragState = null;
     });
-  } else if (isFromPlayer && !isOverPlayer) {
+  } else if (!isGallery && !overPlayer) {
+    // Eject from player
     stop();
     stopBreathing();
-    const targetEl = document.querySelector(`.tape-item[data-tape-id="${tapeId}"]`);
-    const flyRect = ghost.getBoundingClientRect();
-    const targetRect = targetEl ? targetEl.getBoundingClientRect()
-      : { left: ghostRect.left, top: window.innerHeight - 140, width: ghostRect.width, height: ghostRect.height };
-    flyGhostToTarget(ghost, flyRect, targetRect, () => {
+    var targetEl = document.querySelector('.tape-item[data-tape-id="' + tapeId + '"]');
+    var targetRect = targetEl ? targetEl.getBoundingClientRect() : { left: ghostLeft, top: window.innerHeight - 140, width: ghostW, height: ghostH };
+    flyGhostOut(ghost, targetRect, function () {
       ghost.remove();
       tapeEl.style.opacity = '1';
       if (targetEl) targetEl.style.opacity = '1';
       if (typeof onTapeUnloaded === 'function') onTapeUnloaded(tape);
       dragState = null;
     });
-  } else if (isFromPlayer && isOverPlayer) {
-    // Dropped back on player — just fade the ghost
-    ghost.style.transition = 'opacity 0.25s';
+  } else if (!isGallery && overPlayer) {
+    // Back onto player — cancel
+    ghost.style.transition = 'opacity 0.2s';
     ghost.style.opacity = '0';
-    ghost.addEventListener('transitionend', () => {
-      ghost.remove();
-      tapeEl.style.opacity = '1';
-      dragState = null;
-    }, { once: true });
+    ghost.addEventListener('transitionend', function () { ghost.remove(); tapeEl.style.opacity = '1'; dragState = null; }, { once: true });
   } else {
-    // Spring back to gallery — use CSS transition (avoids GSAP state conflict)
-    ghost.style.transition = 'transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1)';
-    ghost.style.transform = 'scale(1.08)';
-    ghost.addEventListener('transitionend', () => {
-      ghost.remove();
-      tapeEl.style.opacity = '1';
-      dragState = null;
-    }, { once: true });
+    // Spring back
+    var origRect = tapeEl.getBoundingClientRect();
+    gsap.to(ghost, { left: origRect.left, top: origRect.top, duration: 0.35, ease: 'back.out(1.5)',
+      onComplete: function () { ghost.remove(); tapeEl.style.opacity = '1'; dragState = null; }
+    });
   }
 }
 
-/* ---- GPU-accelerated fly animations ---- */
+/* ---- Fly animations ---- */
 
-function flyGhostToPlayer(ghost, ghostRect, playerRect, onComplete) {
-  const gw = ghostRect.width;
-  const gh = ghostRect.height;
-  const pcx = playerRect.left + playerRect.width / 2;
-  const pcy = playerRect.top + playerRect.height / 2;
-  const targetLeft = pcx - gw / 2;
-  const targetTop = pcy - gh / 2;
-  const curLeft = ghostRect.left;
-  const curTop = ghostRect.top;
-  const deltaX = curLeft - targetLeft;
-  const deltaY = curTop - targetTop;
-  const scaleW = playerRect.width / gw;
-  const scaleH = playerRect.height / gh;
-  const scale = Math.min(scaleW, scaleH, 3);
+function flyGhostIn(ghost, playerRect, done) {
+  var r = ghost.getBoundingClientRect();
+  var pcx = playerRect.left + playerRect.width / 2;
+  var pcy = playerRect.top + playerRect.height / 2;
+  var targetLeft = pcx - r.width / 2;
+  var targetTop = pcy - r.height / 2;
+  var scale = Math.min(playerRect.width / r.width, playerRect.height / r.height, 3);
 
-  // Set final position, then use transform to shift back to current visual spot.
-  // CSS transition animates translate from deltaX→0 and scale from 1.08→target.
-  ghost.style.left = targetLeft + 'px';
-  ghost.style.top = targetTop + 'px';
-  ghost.style.transformOrigin = '50% 50%';
-  ghost.style.transform = `translate(${deltaX}px, ${deltaY}px) scale(1.08)`;
-  ghost.style.transition = 'none';
-
-  // Force the above styles to render, then kick off the transition
-  ghost.offsetHeight;
-  ghost.style.transition = 'transform 0.5s cubic-bezier(0.4, 0, 0.2, 1)';
-  ghost.style.transform = `translate(0px, 0px) scale(${scale})`;
-
-  ghost.addEventListener('transitionend', function handler() {
-    ghost.removeEventListener('transitionend', handler);
-    ghost.style.transition = 'none';
-    ghost.style.transformOrigin = '';
-    onComplete();
+  gsap.to(ghost, {
+    left: targetLeft, top: targetTop,
+    scaleX: scale, scaleY: scale,
+    duration: 0.5, ease: 'power3.inOut',
+    onComplete: done
   });
 }
 
-function flyGhostToTarget(ghost, ghostRect, targetRect, onComplete) {
-  const curLeft = ghostRect.left;
-  const curTop = ghostRect.top;
-  const deltaX = curLeft - targetRect.left;
-  const deltaY = curTop - targetRect.top;
-
-  ghost.style.left = targetRect.left + 'px';
-  ghost.style.top = targetRect.top + 'px';
-  ghost.style.transformOrigin = '50% 50%';
-  ghost.style.transform = `translate(${deltaX}px, ${deltaY}px) scale(1.08)`;
-  ghost.style.transition = 'none';
-
-  ghost.offsetHeight;
-  ghost.style.transition = 'transform 0.45s cubic-bezier(0.4, 0, 0.2, 1)';
-  ghost.style.transform = 'translate(0px, 0px) scale(1)';
-
-  ghost.addEventListener('transitionend', function handler() {
-    ghost.removeEventListener('transitionend', handler);
-    ghost.style.transition = 'none';
-    ghost.style.transformOrigin = '';
-    onComplete();
+function flyGhostOut(ghost, targetRect, done) {
+  gsap.to(ghost, {
+    left: targetRect.left, top: targetRect.top,
+    scaleX: 1, scaleY: 1,
+    duration: 0.45, ease: 'power3.in',
+    onComplete: done
   });
 }
 
-/* ---- Public: click-to-load ---- */
+/* ---- Click-to-load ---- */
 
-let loadingTapeId = null;
+var loadingTapeId = null;
 
 function loadTapeToPlayer(tapeId) {
   if (loadingTapeId === tapeId) return;
-  const tape = getTapeById(tapeId);
+  var tape = getTapeById(tapeId);
   if (!tape) return;
   loadingTapeId = tapeId;
 
-  const playerRect = getPlayerRect();
-  const galleryTape = document.querySelector(`.tape-item[data-tape-id="${tapeId}"]`);
+  var playerRect = getPlayerRect();
+  var galleryTape = document.querySelector('.tape-item[data-tape-id="' + tapeId + '"]');
 
   if (galleryTape) {
-    const rect = galleryTape.getBoundingClientRect();
-    const ghost = galleryTape.cloneNode(true);
+    var rect = galleryTape.getBoundingClientRect();
+    var ghost = galleryTape.cloneNode(true);
     ghost.classList.add('dragging');
     ghost.style.position = 'fixed';
     ghost.style.left = rect.left + 'px';
@@ -308,27 +229,25 @@ function loadTapeToPlayer(tapeId) {
     ghost.style.width = rect.width + 'px';
     ghost.style.height = rect.height + 'px';
     ghost.style.margin = '0';
-    ghost.style.flex = 'none';
     ghost.style.zIndex = '200';
     ghost.style.pointerEvents = 'none';
-    ghost.style.willChange = 'transform';
     document.body.appendChild(ghost);
     galleryTape.style.opacity = '0.3';
 
-    const slot = document.getElementById('player-tape-slot');
+    var slot = document.getElementById('player-tape-slot');
     slot.style.transition = 'none';
     slot.style.opacity = '0';
     slot.style.transform = 'scale(0.92)';
 
-    flyGhostToPlayer(ghost, rect, playerRect, () => {
+    flyGhostIn(ghost, playerRect, function () {
       galleryTape.style.opacity = '1';
       loadTape(tape);
-      slot.style.transition = 'transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1), opacity 0.25s ease';
+      slot.style.transition = 'opacity 0.25s, transform 0.25s cubic-bezier(0.34,1.56,0.64,1)';
       slot.style.opacity = '1';
       slot.style.transform = 'scale(1)';
-      ghost.style.transition = 'opacity 0.18s';
+      ghost.style.transition = 'opacity 0.15s';
       ghost.style.opacity = '0';
-      ghost.addEventListener('transitionend', () => ghost.remove(), { once: true });
+      ghost.addEventListener('transitionend', function () { ghost.remove(); }, { once: true });
       play();
       loadingTapeId = null;
       if (typeof onTapeLoaded === 'function') onTapeLoaded(tape);
@@ -341,5 +260,5 @@ function loadTapeToPlayer(tapeId) {
   }
 }
 
-let onTapeLoaded = null;
-let onTapeUnloaded = null;
+var onTapeLoaded = null;
+var onTapeUnloaded = null;
